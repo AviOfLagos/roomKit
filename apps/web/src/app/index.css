@@ -1,0 +1,192 @@
+/* roomKit Premium Global CSS */
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+
+  /* Harmonious Dark Palette */
+  --bg-deep: 240 10% 3.9%;          /* #09090b */
+  --bg-card: 240 10% 7.8%;          /* #121215 */
+  --bg-card-glass: 240 10% 6% / 0.5;
+  
+  --primary: 250 95% 65%;           /* Glowing Indigo */
+  --primary-hover: 250 95% 72%;
+  --accent: 190 95% 55%;            /* Neon Cyan */
+  --success: 142 70% 45%;           /* Vibrant Emerald */
+  --error: 0 84% 60%;               /* Crimson Rose */
+
+  --text-primary: 0 0% 98%;
+  --text-muted: 240 5% 65%;
+  --border-glass: 240 5% 15% / 0.8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: hsl(var(--bg-deep));
+  color: hsl(var(--text-primary));
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(18, 18, 22, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card {
+  background: rgba(25, 25, 30, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: hsla(var(--primary) / 0.4);
+  box-shadow: 0 0 20px hsla(var(--primary) / 0.15);
+  transform: translateY(-2px);
+}
+
+/* Dynamic Gradients & Animations */
+.text-glow {
+  background: linear-gradient(135deg, #fff 0%, hsla(var(--primary) / 0.8) 50%, hsla(var(--accent) / 0.8) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btn-glowing {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(265 95% 65%) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 0 15px hsla(var(--primary) / 0.4);
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-glowing::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: all 0.6s ease;
+}
+
+.btn-glowing:hover::after {
+  left: 100%;
+}
+
+.btn-glowing:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 25px hsla(var(--primary) / 0.6);
+}
+
+.btn-glowing:active {
+  transform: scale(0.98);
+}
+
+/* Micro-animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 5px hsla(var(--primary) / 0.3)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 15px hsla(var(--primary) / 0.7)); }
+}
+
+.animate-glow {
+  animation: pulse-glow 3s infinite ease-in-out;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Custom WebRTC Meeting Layouts */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+}
+
+.video-tile {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #18181b;
+  aspect-ratio: 16/9;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.video-tile.speaking {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 15px hsla(var(--primary) / 0.4);
+}
+
+.video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile-overlay {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

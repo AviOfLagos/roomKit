@@ -1,0 +1,15 @@
+{
+  "name": "roomkit-monorepo",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @roomkit/gateway dev & pnpm --filter @roomkit/web dev",
+    "build": "pnpm -r build",
+    "install:all": "pnpm install"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: roomkit-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: roomkit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+  minio:
+    image: minio/minio:latest
+    container_name: roomkit-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin12345
+    volumes:
+      - minio-data:/data
+    restart: always
+
+  # Helper service to auto-create S3 bucket in MinIO on start
+  minio-init:
+    image: minio/mc:latest
+    container_name: roomkit-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc alias set local http://minio:9000 admin admin12345) do echo 'Waiting for MinIO...' && sleep 1; done;
+      /usr/bin/mc mb --ignore-existing local/roomkit-recordings;
+      /usr/bin/mc anonymous set public local/roomkit-recordings;
+      exit 0;
+      "
+
+  livekit:
+    image: livekit/livekit:v1.5.0
+    container_name: roomkit-livekit
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50050:50000-50050/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    depends_on:
+      - postgres
+    restart: always
+
+volumes:
+  postgres-data:
+  minio-data:
