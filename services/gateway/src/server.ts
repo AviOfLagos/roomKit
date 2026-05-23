@@ -3,6 +3,8 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import roomRoutes from './routes/rooms.js';
 import webhookRoutes from './routes/webhooks.js';
+import recordingRoutes from './routes/recording.js';
+import tokenRoutes from './routes/tokens.js';
 import { setupWebSocketBridge } from './gateway/ws-bridge.js';
 import dotenv from 'dotenv';
 
@@ -41,6 +43,8 @@ await fastify.register(async (instance) => {
 
 await fastify.register(roomRoutes);
 await fastify.register(webhookRoutes);
+await fastify.register(recordingRoutes);
+await fastify.register(tokenRoutes);
 
 const start = async () => {
   try {
