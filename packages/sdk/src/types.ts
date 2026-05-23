@@ -43,6 +43,8 @@ export interface JoinOptions {
   token: string;
   /** `'mixed'` (default) or `'per-track'`. */
   stream?: StreamMode;
+  /** Required when `stream === 'per-track'` — id of the participant to subscribe to. */
+  participantId?: string;
 }
 
 export interface SimulatedRoomScriptStep {

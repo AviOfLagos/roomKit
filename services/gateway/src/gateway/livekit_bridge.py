@@ -33,10 +33,13 @@ def resample_16k_to_48k(data_bytes: bytes) -> bytes:
     return bytes(out)
 
 class LiveKitBridge:
-    def __init__(self, room_name: str, lk_token: str, local_ws_url: str):
+    def __init__(self, room_name: str, lk_token: str, local_ws_url: str,
+                 stream_mode: str = "mixed", target_participant_id: str = ""):
         self.room_name = room_name
         self.lk_token = lk_token
         self.local_ws_url = local_ws_url
+        self.stream_mode = stream_mode  # "mixed" | "per-track"
+        self.target_participant_id = target_participant_id
         self.room = rtc.Room()
         self.ws = None
         self.audio_source = rtc.AudioSource(48000, 1) # 48kHz, mono
@@ -74,9 +77,16 @@ class LiveKitBridge:
 
         @self.room.on("track_subscribed")
         def on_track_subscribed(track: rtc.Track, publication: rtc.TrackPublication, participant: rtc.RemoteParticipant):
-            if track.kind == rtc.TrackKind.KIND_AUDIO:
-                print(f"Subscribed to remote audio track: {track.sid} from {participant.identity}", flush=True)
-                asyncio.create_task(self.receive_track_audio(track, participant.identity))
+            if track.kind != rtc.TrackKind.KIND_AUDIO:
+                return
+            # Per-track stream mode: only forward audio from the requested participant.
+            # Other participants' tracks are dropped at the bridge so the client WS
+            # carries a single-speaker stream end-to-end.
+            if self.stream_mode == "per-track" and participant.identity != self.target_participant_id:
+                print(f"[per-track] dropping audio from {participant.identity} (target={self.target_participant_id})", flush=True)
+                return
+            print(f"Subscribed to remote audio track: {track.sid} from {participant.identity}", flush=True)
+            asyncio.create_task(self.receive_track_audio(track, participant.identity))
 
         # 3. Connect to LiveKit Room
         lk_url = "ws://localhost:7880"
@@ -96,6 +106,25 @@ class LiveKitBridge:
             "participantId": self.room.local_participant.identity,
             "role": "agent",
             "at": int(asyncio.get_event_loop().time() * 1000)
+        })
+
+        # Emit current participants list so per-track clients can discover identities
+        # without polling REST. Additive event — not in the frozen RoomEvent union;
+        # clients that don't know about it should ignore unknown types per spec.
+        remote_participants = [
+            {
+                "participantId": p.identity,
+                "displayName": p.name or "",
+                "role": "agent" if "agent" in p.identity else "human",
+            }
+            for p in self.room.participants.values()
+        ]
+        self.send_event({
+            "type": "participants.list",
+            "participants": remote_participants,
+            "streamMode": self.stream_mode,
+            "targetParticipantId": self.target_participant_id or None,
+            "at": int(asyncio.get_event_loop().time() * 1000),
         })
 
         # 5. Start bidirection routing
@@ -174,9 +203,21 @@ if __name__ == "__main__":
     parser.add_argument("--room", required=True)
     parser.add_argument("--token", required=True)
     parser.add_argument("--local-ws", required=True)
+    parser.add_argument("--stream", choices=["mixed", "per-track"], default="mixed")
+    parser.add_argument("--participant-id", default="")
     args = parser.parse_args()
 
-    bridge = LiveKitBridge(args.room, args.token, args.local_ws)
+    if args.stream == "per-track" and not args.participant_id:
+        print("ERROR: --participant-id required when --stream=per-track", flush=True)
+        raise SystemExit(2)
+
+    bridge = LiveKitBridge(
+        args.room,
+        args.token,
+        args.local_ws,
+        stream_mode=args.stream,
+        target_participant_id=args.participant_id,
+    )
     try:
         asyncio.run(bridge.run())
     except KeyboardInterrupt:

@@ -114,12 +114,16 @@ def _build_url(
     room_id: str,
     token: str,
     stream: str = "mixed",
+    participant_id: str = "",
 ) -> str:
     base = gateway_url.rstrip("/")
-    return (
+    url = (
         f"{base}/v1/rooms/{room_id}/agent"
         f"?token={quote(token, safe='')}&stream={stream}"
     )
+    if participant_id:
+        url += f"&participantId={quote(participant_id, safe='')}"
+    return url
 
 
 @asynccontextmanager
@@ -129,6 +133,7 @@ async def join(
     *,
     gateway_url: str = "ws://localhost:3000",
     stream: str = "mixed",
+    participant_id: str = "",
 ) -> AsyncIterator[Room]:
     """Open a WebSocket session to the roomKit gateway as a BYO agent.
 
@@ -143,7 +148,9 @@ async def join(
                     pcm = await room.recv()
                     await room.send(pcm)  # echo
     """
-    url = _build_url(gateway_url, room_id, token, stream)
+    if stream == "per-track" and not participant_id:
+        raise ValueError("participant_id is required when stream='per-track'")
+    url = _build_url(gateway_url, room_id, token, stream, participant_id)
     async with connect(url) as ws:
         room = Room(ws)
         room._start()

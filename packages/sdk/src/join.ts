@@ -13,9 +13,15 @@ import type { Call, JoinOptions } from './types.js';
  * for the in-process equivalent with identical surface.
  */
 export async function join(options: JoinOptions): Promise<Call> {
-  const { url, room, token, stream = 'mixed' } = options;
+  const { url, room, token, stream = 'mixed', participantId } = options;
+  if (stream === 'per-track' && !participantId) {
+    throw new Error("join: participantId is required when stream === 'per-track'");
+  }
   const base = url.replace(/\/+$/, '');
-  const target = `${base}${ENDPOINTS.agentWs(room, token, stream)}`;
+  let target = `${base}${ENDPOINTS.agentWs(room, token, stream)}`;
+  if (participantId) {
+    target += `&participantId=${encodeURIComponent(participantId)}`;
+  }
 
   const events = new EventEmitter();
   events.setMaxListeners(64);
