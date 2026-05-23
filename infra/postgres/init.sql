@@ -55,3 +55,22 @@ CREATE TABLE IF NOT EXISTS summaries (
     generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_room_id ON summaries(room_id);
+
+-- L6: tenants (multi-tenant scaffold)
+CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+INSERT INTO tenants (id, name) VALUES ('tenant-dev', 'Dev Tenant')
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id);
+UPDATE api_keys SET tenant_id = 'tenant-dev' WHERE tenant_id IS NULL;
+
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id);
+UPDATE rooms SET tenant_id = 'tenant-dev' WHERE tenant_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_rooms_tenant ON rooms(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
