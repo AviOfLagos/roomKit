@@ -26,9 +26,17 @@ export function setupWebSocketBridge(fastify: any) {
   fastify.get('/v1/rooms/:id/agent', { websocket: true }, async (connection: SocketStream, req: any) => {
     const { id: roomId } = req.params;
     const token = req.query.token;
+    const streamMode = req.query.stream === 'per-track' ? 'per-track' : 'mixed';
+    const targetParticipantId = typeof req.query.participantId === 'string' ? req.query.participantId : '';
 
     if (!token) {
       connection.socket.send(JSON.stringify({ type: 'error', code: 'auth.missing_token', message: 'Missing token query parameter', recoverable: false }));
+      connection.socket.close();
+      return;
+    }
+
+    if (streamMode === 'per-track' && !targetParticipantId) {
+      connection.socket.send(JSON.stringify({ type: 'error', code: 'stream.missing_participant', message: 'per-track stream requires participantId query parameter', recoverable: false }));
       connection.socket.close();
       return;
     }
@@ -55,14 +63,20 @@ export function setupWebSocketBridge(fastify: any) {
       // Spawn local Python WebRTC to WS bridge
       const scriptPath = 'src/gateway/livekit_bridge.py';
       const localWsUrl = `ws://localhost:${process.env.PORT || 3000}/bridge/${bridgeId}`;
-      
-      console.log(`[Bridge Ingress] Spawning Python bridge. ID: ${bridgeId}, Room: ${roomId}, localWs: ${localWsUrl}`);
-      const pyProcess = spawn('python3', [
+
+      const pyArgs = [
         scriptPath,
         '--room', roomId,
         '--token', lkToken,
-        '--local-ws', localWsUrl
-      ]);
+        '--local-ws', localWsUrl,
+        '--stream', streamMode,
+      ];
+      if (streamMode === 'per-track') {
+        pyArgs.push('--participant-id', targetParticipantId);
+      }
+
+      console.log(`[Bridge Ingress] Spawning Python bridge. ID: ${bridgeId}, Room: ${roomId}, stream: ${streamMode}${targetParticipantId ? ` (participantId=${targetParticipantId})` : ''}, localWs: ${localWsUrl}`);
+      const pyProcess = spawn('python3', pyArgs);
 
       // Create session
       const session: BridgeSession = {
