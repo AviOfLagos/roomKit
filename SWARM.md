@@ -24,19 +24,27 @@
 
 | id  | status | wave | branch              | worktree           | scope (files)                                                                       | depends on | owner |
 |-----|--------|------|---------------------|--------------------|-------------------------------------------------------------------------------------|------------|-------|
-| L1  | .      | A    | lane/sim-sdk-py     | ../roomKit-L1      | `packages/sim-sdk-py/**` (new)                                                      | —          | —     |
-| L2  | .      | A    | lane/sim-sdk-node   | ../roomKit-L2      | `packages/sdk/**` (new — Node `join()` API)                                         | —          | —     |
-| L3  | .      | A    | lane/web-client     | ../roomKit-L3      | `apps/web/src/**`                                                                   | —          | —     |
-| L5  | .      | A    | lane/recording      | ../roomKit-L5      | `services/gateway/src/routes/recording.ts` (new) + `services/gateway/src/livekit.ts` egress helper | — | — |
-| L6  | .      | A    | lane/tenant-auth    | ../roomKit-L6      | `services/gateway/src/routes/tokens.ts` (new) + `infra/postgres/init.sql`           | —          | —     |
-| L8  | .      | A    | lane/examples-docs  | ../roomKit-L8      | `examples/**` + `docs/**`                                                           | —          | —     |
-| L4  | .      | B    | lane/per-track-ws   | ../roomKit-L4      | `services/gateway/src/gateway/ws-bridge.ts` + `services/gateway/src/gateway/livekit_bridge.py` | L1, L2 (for sim test harness) | — |
-| L7  | .      | B    | lane/supervisor     | ../roomKit-L7      | `services/gateway/src/gateway/supervisor.ts` (new) + 1-line hook in `ws-bridge.ts`  | L4         | —     |
+| L1  | x      | A    | lane/sim-sdk-py     | (sandbox blocked sibling worktrees → built in main cwd, committed via branch-switch) | `packages/sim-sdk-py/**` | — | subagent + orch |
+| L2  | x      | A    | lane/sim-sdk-node   | (same)             | `packages/sdk/**`                                                                   | —          | subagent + orch |
+| L3  | x      | A    | lane/web-client     | (same)             | `apps/web/**`                                                                       | —          | subagent + orch |
+| L5  | x      | A    | lane/recording      | (main-thread direct after 3 subagent attempts failed) | `services/gateway/src/routes/recording.ts` + `services/gateway/src/livekit.ts` | — | orch |
+| L6  | x      | A    | lane/tenant-auth    | (main-thread direct after 3 subagent attempts failed) | `services/gateway/src/routes/tokens.ts` + `infra/postgres/init.sql` | — | orch |
+| L8  | x      | A    | lane/examples-docs  | (main-thread direct)                                  | `examples/**` + `docs/**` | — | orch |
+| L4  | .      | B    | lane/per-track-ws   | (main-thread plan)                                    | `services/gateway/src/gateway/ws-bridge.ts` + `services/gateway/src/gateway/livekit_bridge.py` | L1, L2 | — |
+| L7  | .      | B    | lane/supervisor     | (main-thread plan)                                    | `services/gateway/src/gateway/supervisor.ts` (new) + 1-line hook in `ws-bridge.ts` | L4 | — |
 
 ## Conflict map
 
 - L4 & L7 both touch `ws-bridge.ts` → L4 owns body, L7 owns new `supervisor.ts` + 1 import line.
 - L5 may need new `recordings`-related table → schema-owner = L6; coordinate via comment in L5 LANE_REPORT.md asking L6 to add.
+
+## Lessons learned (wave-A)
+
+- **Sandbox boundary**: subagents cannot access sibling worktrees (`../roomKit-L*`) — only `/Users/Apple/26/Antigravity/MeetMind/roomKit/**`. Pre-creating worktrees outside cwd = wasted work.
+- **Subagent git is blocked**: subagents can write files into cwd but cannot run `git add`/`commit`. Orchestrator (main thread) must do the commit + branch-switch step.
+- **`cavecrew-builder` lacks Bash + refuses LANE_REPORT.md as a 3rd file**: use `general-purpose` for any lane that needs to write a status report or run shell.
+- **Race risk**: parallel subagents all wrote into the same cwd. File scopes were disjoint so no collisions, but staging by pathspec was critical at commit time.
+- **Working pattern for wave-B+**: spawn agent with explicit cwd files, instruct it to NOT run git, then orchestrator stashes + branch-switches + commits.
 
 ## Decision gates
 
