@@ -190,3 +190,100 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   gap: 4px;
 }
+
+/* --- Layout primitives used by the room UI ---------------------------- */
+
+.rk-landing {
+  background:
+    radial-gradient(ellipse at top right, rgba(76, 29, 149, 0.18), transparent 60%),
+    radial-gradient(ellipse at bottom left, rgba(8, 145, 178, 0.08), transparent 60%),
+    #09090b;
+  color: hsl(var(--text-primary));
+}
+
+.rk-room,
+.rk-room-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rk-room-body {
+  flex: 1;
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (min-width: 1024px) {
+  .rk-room-body {
+    flex-direction: row;
+  }
+}
+
+.rk-video-grid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  width: 100%;
+}
+
+.rk-video-grid .lk-grid-layout,
+.rk-video-grid .lk-grid-layout-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.rk-side {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+@media (min-width: 1024px) {
+  .rk-side {
+    width: 320px;
+    max-height: calc(100vh - 32px);
+  }
+}
+
+.rk-side-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.rk-controlbar {
+  flex-shrink: 0;
+}
+
+/* Minimal fallback styling for LiveKit's ParticipantTile when the
+ * `@livekit/components-styles` stylesheet is not installed. Keeps tiles
+ * readable instead of unstyled blocks. */
+.lk-participant-tile {
+  position: relative;
+  background: #18181b;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lk-participant-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lk-participant-tile .lk-participant-metadata {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
