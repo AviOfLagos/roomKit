@@ -30,8 +30,8 @@
 | L5  | x      | A    | lane/recording      | (main-thread direct after 3 subagent attempts failed) | `services/gateway/src/routes/recording.ts` + `services/gateway/src/livekit.ts` | — | orch |
 | L6  | x      | A    | lane/tenant-auth    | (main-thread direct after 3 subagent attempts failed) | `services/gateway/src/routes/tokens.ts` + `infra/postgres/init.sql` | — | orch |
 | L8  | x      | A    | lane/examples-docs  | (main-thread direct)                                  | `examples/**` + `docs/**` | — | orch |
-| L4  | .      | B    | lane/per-track-ws   | (main-thread plan)                                    | `services/gateway/src/gateway/ws-bridge.ts` + `services/gateway/src/gateway/livekit_bridge.py` | L1, L2 | — |
-| L7  | .      | B    | lane/supervisor     | (main-thread plan)                                    | `services/gateway/src/gateway/supervisor.ts` (new) + 1-line hook in `ws-bridge.ts` | L4 | — |
+| L4  | x      | B    | lane/per-track-ws   | (main-thread direct)                                  | `services/gateway/src/gateway/ws-bridge.ts` + `livekit_bridge.py` + SDK `participantId` opts | L1, L2 | orch |
+| L7  | x      | B    | lane/supervisor     | (main-thread direct)                                  | `services/gateway/src/gateway/supervisor.ts` + supervisor hook in `ws-bridge.ts` | L4 | orch |
 
 ## Conflict map
 
