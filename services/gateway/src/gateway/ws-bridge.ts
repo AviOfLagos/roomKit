@@ -1,8 +1,8 @@
 import { SocketStream } from '@fastify/websocket';
-import { spawn, ChildProcess } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { generateLiveKitToken } from '../livekit.js';
+import { startSupervisedProcess, SupervisorHandle } from './supervisor.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,7 +13,7 @@ interface BridgeSession {
   roomId: string;
   clientSocket: SocketStream;
   bridgeSocket: SocketStream | null;
-  childProcess: ChildProcess;
+  supervisor: SupervisorHandle;
   pendingData: Array<{ isBinary: boolean; data: any }>;
 }
 
@@ -76,32 +76,49 @@ export function setupWebSocketBridge(fastify: any) {
       }
 
       console.log(`[Bridge Ingress] Spawning Python bridge. ID: ${bridgeId}, Room: ${roomId}, stream: ${streamMode}${targetParticipantId ? ` (participantId=${targetParticipantId})` : ''}, localWs: ${localWsUrl}`);
-      const pyProcess = spawn('python3', pyArgs);
+
+      const supervisor = startSupervisedProcess({
+        command: 'python3',
+        args: pyArgs,
+        bridgeId,
+        onStdout: (data) => console.log(`[Bridge Python stdout ${bridgeId}]: ${data.toString().trim()}`),
+        onStderr: (data) => console.error(`[Bridge Python stderr ${bridgeId}]: ${data.toString().trim()}`),
+        onRestart: (attempt) => {
+          // Notify the BYO client that we're reconnecting; payload conforms to RoomEvent 'error'
+          // shape with recoverable=true so the SDK can surface the blip without tearing down.
+          try {
+            connection.socket.send(JSON.stringify({
+              type: 'error',
+              code: 'bridge.restarted',
+              message: `Python bridge restarted (attempt ${attempt})`,
+              recoverable: true,
+            }));
+          } catch { /* ignore */ }
+        },
+        onGaveUp: (code, signal) => {
+          console.error(`[Bridge Python ${bridgeId}] supervisor gave up. Exit code=${code} signal=${signal}.`);
+          try {
+            connection.socket.send(JSON.stringify({
+              type: 'error',
+              code: 'bridge.exhausted',
+              message: 'Python bridge restart budget exhausted',
+              recoverable: false,
+            }));
+          } catch { /* ignore */ }
+          cleanupSession(bridgeId);
+        },
+      });
 
       // Create session
       const session: BridgeSession = {
         roomId,
         clientSocket: connection,
         bridgeSocket: null,
-        childProcess: pyProcess,
+        supervisor,
         pendingData: [],
       };
 
       activeBridges.set(bridgeId, session);
-
-      // Log subprocess output
-      pyProcess.stdout?.on('data', (data) => {
-        console.log(`[Bridge Python stdout ${bridgeId}]: ${data.toString().trim()}`);
-      });
-
-      pyProcess.stderr?.on('data', (data) => {
-        console.error(`[Bridge Python stderr ${bridgeId}]: ${data.toString().trim()}`);
-      });
-
-      pyProcess.on('close', (code) => {
-        console.log(`[Bridge Python exit ${bridgeId}]: code ${code}`);
-        cleanupSession(bridgeId);
-      });
 
       // Listen for data from client
       connection.socket.on('message', (message, isBinary) => {
@@ -179,9 +196,9 @@ function cleanupSession(bridgeId: string) {
   activeBridges.delete(bridgeId);
   console.log(`[Bridge Cleanup] Tearing down bridge: ${bridgeId}`);
 
-  // Kill Python bridge
+  // Stop the supervisor (graceful SIGTERM to current child, no further restarts)
   try {
-    session.childProcess.kill('SIGTERM');
+    session.supervisor.stop();
   } catch (e) {
     // Already dead
   }
