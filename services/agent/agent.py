@@ -103,6 +103,12 @@ class RoomKitAgent:
             except Exception as e:
                 logger.error(f"Failed to persist transcript chunk to gateway: {e}")
 
+            # 4. Bump inactivity tracker — a human just spoke.
+            try:
+                requests.post(f"{GATEWAY_URL}/v1/rooms/{self.room.name}/heartbeat", timeout=1)
+            except Exception:
+                pass
+
         @self.agent.on("agent_action")
         def on_agent_action(action):
             # Triggered when agent speaks or replies

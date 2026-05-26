@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { sql } from '../db.js';
+import { bump, untrack } from '../inactivity.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -36,13 +37,16 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       if (event.event === 'room_finished') {
-        // Mark room as ended in database
         await sql`
           UPDATE rooms
           SET status = 'ended', ended_at = NOW()
           WHERE id = ${roomId}
         `;
+        untrack(roomId);
         console.log(`Room ${roomId} marked as ended via webhook`);
+      } else if (event.event === 'participant_joined' || event.event === 'track_published') {
+        // Any meaningful room activity resets the idle timer.
+        bump(roomId);
       }
 
       return { success: true };

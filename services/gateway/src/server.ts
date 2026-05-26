@@ -6,6 +6,7 @@ import webhookRoutes from './routes/webhooks.js';
 import recordingRoutes from './routes/recording.js';
 import tokenRoutes from './routes/tokens.js';
 import { setupWebSocketBridge } from './gateway/ws-bridge.js';
+import { startInactivityMonitor } from './inactivity.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -49,6 +50,7 @@ await fastify.register(tokenRoutes);
 const start = async () => {
   try {
     await fastify.listen({ port, host: '0.0.0.0' });
+    startInactivityMonitor();
     console.log(`Gateway Server running on http://localhost:${port}`);
   } catch (err) {
     fastify.log.error(err);

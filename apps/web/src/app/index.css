@@ -678,3 +678,79 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .rk-footer a:hover { color: hsl(var(--text-primary)); }
+
+/* --- Inactivity modal ------------------------------------------------- */
+
+.rk-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 9, 11, 0.7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: rk-fade-in 0.15s ease-out;
+}
+
+.rk-modal-card {
+  width: min(420px, calc(100vw - 32px));
+  background: hsl(var(--bg-card));
+  border: 1px solid hsl(var(--border-glass));
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  color: hsl(var(--text-primary));
+  font-family: var(--font-sans);
+}
+
+.rk-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.rk-modal-head svg:first-child {
+  color: hsl(var(--error));
+}
+
+.rk-modal-x {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: hsl(var(--text-muted));
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.rk-modal-x:hover {
+  color: hsl(var(--text-primary));
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rk-modal-body {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: hsl(var(--text-muted));
+  margin: 0 0 20px;
+}
+
+.rk-modal-body strong {
+  color: hsl(var(--error));
+  font-variant-numeric: tabular-nums;
+}
+
+.rk-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@keyframes rk-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

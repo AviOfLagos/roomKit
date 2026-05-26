@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { sql } from '../db.js';
 import { generateLiveKitToken, forceEndRoom, getRoomServiceClient } from '../livekit.js';
 import { v4 as uuidv4 } from 'uuid';
+import { trackRoom, untrack, bump, extendRoom, IDLE_WARN_MS, IDLE_CLOSE_MS } from '../inactivity.js';
 
 // Authentication helper
 export async function authenticateApiKey(request: FastifyRequest, reply: FastifyReply) {
@@ -46,6 +47,8 @@ export default async function roomRoutes(fastify: FastifyInstance) {
       INSERT INTO rooms (id, status, metadata)
       VALUES (${roomId}, 'active', ${sql.json(metadata)})
     `;
+
+    trackRoom(roomId);
 
     // Generate web client join URL
     const clientHost = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:3000';
@@ -125,8 +128,23 @@ export default async function roomRoutes(fastify: FastifyInstance) {
 
     // Terminate in LiveKit
     await forceEndRoom(id);
+    untrack(id);
 
     return { success: true, message: `Room ${id} terminated` };
+  });
+
+  // POST /v1/rooms/:id/heartbeat — bump last-activity (no auth required; idempotent + safe)
+  fastify.post('/v1/rooms/:id/heartbeat', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    bump(id);
+    return { ok: true, idleWarnMs: IDLE_WARN_MS, idleCloseMs: IDLE_CLOSE_MS };
+  });
+
+  // POST /v1/rooms/:id/extend — modal "Stay" action: bump activity + broadcast cancellation
+  fastify.post('/v1/rooms/:id/extend', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await extendRoom(id);
+    return { ok: true };
   });
 
   // POST /v1/rooms/:id/tokens
