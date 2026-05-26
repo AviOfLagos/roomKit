@@ -89,7 +89,7 @@ export default async function roomRoutes(fastify: FastifyInstance) {
         participants = lkParticipants.map((p) => ({
           identity: p.identity,
           name: p.name,
-          joinedAt: new Date(p.joinedAt * 1000).toISOString(),
+          joinedAt: new Date(Number(p.joinedAt) * 1000).toISOString(),
         }));
       } catch (err: any) {
         // LiveKit room might not exist yet if no one has joined

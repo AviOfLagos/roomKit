@@ -1,4 +1,4 @@
-import { SocketStream } from '@fastify/websocket';
+import WebSocket, { RawData } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { generateLiveKitToken } from '../livekit.js';
@@ -11,10 +11,10 @@ const roomkitApiKey = process.env.ROOMKIT_API_KEY || 'dev';
 
 interface BridgeSession {
   roomId: string;
-  clientSocket: SocketStream;
-  bridgeSocket: SocketStream | null;
+  clientSocket: WebSocket;
+  bridgeSocket: WebSocket | null;
   supervisor: SupervisorHandle;
-  pendingData: Array<{ isBinary: boolean; data: any }>;
+  pendingData: Array<{ isBinary: boolean; data: RawData }>;
 }
 
 // Active session store
@@ -23,21 +23,21 @@ const activeBridges = new Map<string, BridgeSession>();
 export function setupWebSocketBridge(fastify: any) {
   // 1. External Builder Ingress WebSocket
   // wss://<host>/v1/rooms/:id/agent?token=<jwt-with-role=agent>
-  fastify.get('/v1/rooms/:id/agent', { websocket: true }, async (connection: SocketStream, req: any) => {
+  fastify.get('/v1/rooms/:id/agent', { websocket: true }, async (connection: WebSocket, req: any) => {
     const { id: roomId } = req.params;
     const token = req.query.token;
     const streamMode = req.query.stream === 'per-track' ? 'per-track' : 'mixed';
     const targetParticipantId = typeof req.query.participantId === 'string' ? req.query.participantId : '';
 
     if (!token) {
-      connection.socket.send(JSON.stringify({ type: 'error', code: 'auth.missing_token', message: 'Missing token query parameter', recoverable: false }));
-      connection.socket.close();
+      connection.send(JSON.stringify({ type: 'error', code: 'auth.missing_token', message: 'Missing token query parameter', recoverable: false }));
+      connection.close();
       return;
     }
 
     if (streamMode === 'per-track' && !targetParticipantId) {
-      connection.socket.send(JSON.stringify({ type: 'error', code: 'stream.missing_participant', message: 'per-track stream requires participantId query parameter', recoverable: false }));
-      connection.socket.close();
+      connection.send(JSON.stringify({ type: 'error', code: 'stream.missing_participant', message: 'per-track stream requires participantId query parameter', recoverable: false }));
+      connection.close();
       return;
     }
 
@@ -45,8 +45,8 @@ export function setupWebSocketBridge(fastify: any) {
       // Decode and verify JWT token (signed with ROOMKIT_API_KEY)
       const decoded = jwt.verify(token, roomkitApiKey) as { role: string; identity: string };
       if (decoded.role !== 'agent') {
-        connection.socket.send(JSON.stringify({ type: 'error', code: 'auth.invalid_role', message: 'Token must have role=agent', recoverable: false }));
-        connection.socket.close();
+        connection.send(JSON.stringify({ type: 'error', code: 'auth.invalid_role', message: 'Token must have role=agent', recoverable: false }));
+        connection.close();
         return;
       }
 
@@ -87,7 +87,7 @@ export function setupWebSocketBridge(fastify: any) {
           // Notify the BYO client that we're reconnecting; payload conforms to RoomEvent 'error'
           // shape with recoverable=true so the SDK can surface the blip without tearing down.
           try {
-            connection.socket.send(JSON.stringify({
+            connection.send(JSON.stringify({
               type: 'error',
               code: 'bridge.restarted',
               message: `Python bridge restarted (attempt ${attempt})`,
@@ -98,7 +98,7 @@ export function setupWebSocketBridge(fastify: any) {
         onGaveUp: (code, signal) => {
           console.error(`[Bridge Python ${bridgeId}] supervisor gave up. Exit code=${code} signal=${signal}.`);
           try {
-            connection.socket.send(JSON.stringify({
+            connection.send(JSON.stringify({
               type: 'error',
               code: 'bridge.exhausted',
               message: 'Python bridge restart budget exhausted',
@@ -121,40 +121,40 @@ export function setupWebSocketBridge(fastify: any) {
       activeBridges.set(bridgeId, session);
 
       // Listen for data from client
-      connection.socket.on('message', (message, isBinary) => {
+      connection.on('message', (message: RawData, isBinary: boolean) => {
         if (session.bridgeSocket) {
-          session.bridgeSocket.socket.send(message, { binary: isBinary });
+          session.bridgeSocket.send(message, { binary: isBinary });
         } else {
           session.pendingData.push({ isBinary, data: message });
         }
       });
 
-      connection.socket.on('close', () => {
+      connection.on('close', () => {
         console.log(`[Bridge Ingress] Client socket closed: ${bridgeId}`);
         cleanupSession(bridgeId);
       });
 
-      connection.socket.on('error', (err) => {
+      connection.on('error', (err: Error) => {
         console.error(`[Bridge Ingress] Client socket error: ${bridgeId}`, err);
         cleanupSession(bridgeId);
       });
 
     } catch (err: any) {
       console.error('[Bridge Ingress] Auth failed:', err.message);
-      connection.socket.send(JSON.stringify({ type: 'error', code: 'auth.failed', message: 'Token verification failed', recoverable: false }));
-      connection.socket.close();
+      connection.send(JSON.stringify({ type: 'error', code: 'auth.failed', message: 'Token verification failed', recoverable: false }));
+      connection.close();
     }
   });
 
   // 2. Local Python Helper Egress WebSocket
   // ws://localhost:3000/bridge/:bridgeId
-  fastify.get('/bridge/:bridgeId', { websocket: true }, async (connection: SocketStream, req: any) => {
+  fastify.get('/bridge/:bridgeId', { websocket: true }, async (connection: WebSocket, req: any) => {
     const { bridgeId } = req.params;
 
     const session = activeBridges.get(bridgeId);
     if (!session) {
       console.warn(`[Bridge Egress] Unknown bridge connection request: ${bridgeId}`);
-      connection.socket.close();
+      connection.close();
       return;
     }
 
@@ -165,24 +165,24 @@ export function setupWebSocketBridge(fastify: any) {
     if (session.pendingData.length > 0) {
       console.log(`[Bridge Egress] Flushing ${session.pendingData.length} queued messages to python bridge`);
       session.pendingData.forEach((item) => {
-        connection.socket.send(item.data, { binary: item.isBinary });
+        connection.send(item.data, { binary: item.isBinary });
       });
       session.pendingData = [];
     }
 
     // Pipe from Python bridge back to external client
-    connection.socket.on('message', (message, isBinary) => {
-      if (session.clientSocket && session.clientSocket.socket.readyState === session.clientSocket.socket.OPEN) {
-        session.clientSocket.socket.send(message, { binary: isBinary });
+    connection.on('message', (message: RawData, isBinary: boolean) => {
+      if (session.clientSocket && session.clientSocket.readyState === WebSocket.OPEN) {
+        session.clientSocket.send(message, { binary: isBinary });
       }
     });
 
-    connection.socket.on('close', () => {
+    connection.on('close', () => {
       console.log(`[Bridge Egress] Python bridge socket closed: ${bridgeId}`);
       cleanupSession(bridgeId);
     });
 
-    connection.socket.on('error', (err) => {
+    connection.on('error', (err: Error) => {
       console.error(`[Bridge Egress] Python bridge socket error: ${bridgeId}`, err);
       cleanupSession(bridgeId);
     });
@@ -205,14 +205,14 @@ function cleanupSession(bridgeId: string) {
 
   // Close sockets
   try {
-    if (session.clientSocket.socket.readyState !== session.clientSocket.socket.CLOSED) {
-      session.clientSocket.socket.close();
+    if (session.clientSocket.readyState !== WebSocket.CLOSED) {
+      session.clientSocket.close();
     }
   } catch (e) {}
 
   try {
-    if (session.bridgeSocket && session.bridgeSocket.socket.readyState !== session.bridgeSocket.socket.CLOSED) {
-      session.bridgeSocket.socket.close();
+    if (session.bridgeSocket && session.bridgeSocket.readyState !== WebSocket.CLOSED) {
+      session.bridgeSocket.close();
     }
   } catch (e) {}
 }
