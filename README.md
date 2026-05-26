@@ -1,162 +1,149 @@
-# roomKit — Standalone WebRTC + AI Meeting Platform
+# roomKit
 
-A hosted WebRTC meeting platform with a baked-in context-aware AI participant. Builders can initialize video rooms via a standard HTTP REST API, share the secure link with humans, and let the integrated AI assistant join the conversation. Custom AI agents can also stream into the call via an ultra-low-latency WebSocket binary audio gateway.
+**Standalone WebRTC + AI call platform.** Build voice/video rooms with humans, the bundled context-aware AI host, and any number of custom AI agents — joined through one 10-line SDK or a raw 640-byte PCM WebSocket. LiveKit under the hood; your code never touches WebRTC.
 
----
-
-## Technical Stack
-- **SFU**: LiveKit (self-hosted for dev, LiveKit Cloud for prod)
-- **Gateway**: Node.js + TypeScript + Fastify (REST APIs, token generation, WS audio bridge)
-- **Default AI Agent**: Python + `livekit-agents` (Silero VAD, Deepgram STT, OpenAI GPT-4o-mini, ElevenLabs TTS)
-- **Web Client**: Next.js (App Router) + React + LiveKit React SDK
-- **Database**: PostgreSQL (Drizzle ORM / Raw Postgres client)
-- **Auth**: API Key header (`x-api-key`) for REST endpoints; JWT tokens signed by gateway API key for rooms
+[![status: alpha](https://img.shields.io/badge/status-alpha-orange)](#status) [![license: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue)](LICENSE) [![docs](https://img.shields.io/badge/docs-architecture-purple)](docs/architecture.md)
 
 ---
 
-## 5-Minute Quickstart
+## Why
+
+If you are building a voice agent (Vapi/Retell-style), a meeting-bot, a transcription tool, or a multi-agent collaboration product, you usually have to:
+
+- Run an SFU.
+- Wrestle WebRTC (ICE, codec, jitter, TURN).
+- Handle JWT auth, multi-tenancy, recording, transcripts, summaries.
+- Build a web UI for humans.
+- Ship an SDK for your own agents.
+
+roomKit gives you all of that behind a single REST API + a single WebSocket frame contract. Mock your agent against `SimulatedRoom` in CI; ship to production by changing one URL.
+
+## Features
+
+- **Frozen wire contract** — 16 kHz mono PCM Int16 LE, 20 ms (640-byte) binary frames + JSON control sidechannel on the same socket. Defined in `packages/shared/src/wire.ts`, mirrored byte-for-byte in every SDK.
+- **Bundled default AI agent** — Silero VAD, Deepgram STT, OpenAI GPT-4o-mini, ElevenLabs TTS. Drop a `systemPrompt` in room metadata, the agent joins, greets, and transcribes.
+- **BYO agent SDKs** — `callplatform` (Python) and `@roomkit/sdk` (Node/TS). Both expose `recv() / send() / events()` and ship a deterministic `SimulatedRoom` for unit tests.
+- **`mixed` and `per-track` streaming** — get a single downmix, or pin the audio stream to one specific participant for diarization-aware agents.
+- **Server-side recording** — LiveKit Egress → MinIO/S3, MP4 composite, surfaced via REST.
+- **Multi-tenant scaffold** — `tenants` table, API-key → tenant binding, dual-token mint (gateway JWT + LiveKit access token) at `POST /v1/rooms/:id/tokens/sign`.
+- **Supervised audio bridge** — bounded-restart Python subprocess wrapper. On crash, the bridge respawns and emits `error{code:'bridge.restarted', recoverable:true}` so the SDK can keep going.
+- **White-label web client** — Next.js + LiveKit React: landing page, room (video grid + chat + transcripts), ended/summary page.
+
+## Architecture
+
+```
+Web client (Next.js) ──── WebRTC ──► LiveKit SFU ◄── WebRTC ──── Default AI agent (Python)
+                                          │
+                                  (server-side bridge)
+                                          │
+                                          ▼
+                            Gateway (Fastify+TS)
+                            REST /v1/rooms/*
+                            WS  /v1/rooms/:id/agent
+                                          │
+                              raw 16k mono PCM 20 ms
+                                          │
+                                          ▼
+                            BYO agent (Python or Node)
+                            join() / recv() / send() / events()
+```
+
+Full diagram and layer table in [`docs/architecture.md`](docs/architecture.md).
+
+## 5-minute quickstart
 
 ### Prerequisites
-- Node.js >= 22.0.0
-- PNPM installed (`npm install -g pnpm`)
-- Docker & Docker-Compose
-- Python 3.11 with `pip`
 
-### Step 1: Install Dependencies
-From the repository root, install monorepo dependencies:
+- Node ≥ 22, PNPM, Docker + docker-compose, Python 3.11.
+
+### Boot
+
 ```bash
+docker-compose -f infra/docker-compose.yml up -d   # Postgres + MinIO + LiveKit
 pnpm install
+pnpm --filter @roomkit/shared build                # build the shared wire contract first
+pnpm dev                                           # gateway :3000  ·  web :3001
 ```
 
-Set up the Python environment:
+Drop a `.env` in `services/gateway/` (see "Environment" below) before `pnpm dev`.
+
+### Create + join a room
+
 ```bash
-cd services/agent
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cd ../..
+RID=$(curl -s -X POST -H x-api-key:dev -H content-type:application/json \
+  -d '{"context":{"systemPrompt":"You are a friendly meeting host."},"defaultAgent":true}' \
+  http://localhost:3000/v1/rooms | jq -r .roomId)
+
+open "http://localhost:3001/room/$RID"
 ```
 
-### Step 2: Spin Up Infrastructure
-Launch LiveKit, PostgreSQL, and MinIO S3-mock containers:
-```bash
-docker-compose -f infra/docker-compose.yml up -d
-```
+### BYO agent — Python
 
-### Step 3: Run the Platform (Dev Mode)
-Create a `.env` file under `services/gateway/` matching the configuration below, then run the full stack:
-```bash
-pnpm dev
-```
-- Gateway Backend: `http://localhost:3000`
-- Next.js Web Client: `http://localhost:3001` (rewrites `/v1/*` to proxy backend)
-
----
-
-## REST API Reference
-
-All requests to the HTTP API must contain the `x-api-key` header. For local development, this defaults to `dev`.
-
-### 1. Initialize Room
-Creates a new meeting space.
-- **URL**: `POST /v1/rooms`
-- **Headers**: `x-api-key: dev`
-- **Body**:
-```json
-{
-  "context": {
-    "systemPrompt": "You are a polite, professional assistant."
-  },
-  "defaultAgent": true,
-  "maxParticipants": 10
-}
-```
-- **Response**:
-```json
-{
-  "roomId": "room-bc81fa39",
-  "joinUrl": "http://localhost:3000/room/room-bc81fa39",
-  "agentToken": "eyJhbGciOi..."
-}
-```
-
-### 2. Room Status
-Fetches active participants.
-- **URL**: `GET /v1/rooms/:id`
-- **Headers**: `x-api-key: dev`
-- **Response**:
-```json
-{
-  "status": "active",
-  "participants": [
-    { "identity": "human-aefb", "name": "User A", "joinedAt": "2026-05-21T14:30:00Z" }
-  ],
-  "createdAt": "2026-05-21T14:28:00Z"
-}
-```
-
-### 3. Terminate Room
-Kicks participants and terminates the room session.
-- **URL**: `DELETE /v1/rooms/:id`
-- **Headers**: `x-api-key: dev`
-
-### 4. Fetch Room Artifacts
-- **Transcript**: `GET /v1/rooms/:id/transcript` -> returns speaker-tagged transcript chunks.
-- **Summary**: `GET /v1/rooms/:id/summary` -> returns AI generated Markdown summary.
-- **Recording**: `GET /v1/rooms/:id/recording` -> returns signed S3 composite mp4 link.
-
----
-
-## BYO-AI WebSocket Gateway
-
-External AI builders can connect custom voice/LLM agents directly via a raw WebSocket socket, bypassing WebRTC complexity.
-
-- **WebSocket URL**: `ws://localhost:3000/v1/rooms/:roomId/agent?token=<agentToken>`
-
-### Audio Frame Contract
-- **Format**: Raw PCM (no header)
-- **Sample Rate**: 16,000 Hz, mono
-- **Precision**: Signed 16-bit, little-endian
-- **Frame Size**: 20 ms frames (320 samples = 640 bytes)
-- **Piping Rules**:
-  - **Binary frames**: Send / receive audio payload (multiples of 640 bytes).
-  - **Text frames**: Exchange control JSON events (`RoomEvent`).
-
-### 30-Line BYO-AI Agent Example (`examples/byo-agent.py`)
 ```python
 import asyncio
-import sys
-import json
-import websockets
+from callplatform import join
 
-async def run_byo_agent(room_id: str, token: str):
-    gateway_url = f"ws://localhost:3000/v1/rooms/{room_id}/agent?token={token}"
-    print(f"Connecting Custom BYO Agent to: {gateway_url} ...")
-    
-    async with websockets.connect(gateway_url) as ws:
-        print("Joined roomKit gateway!")
-        async for message in ws:
-            if isinstance(message, bytes):
-                # Echo incoming room audio back
-                await ws.send(message)
-            else:
-                event = json.loads(message)
-                print(f"[Event] {event['type']}")
+async def main():
+    async with join(room_id="room-abc", token="GATEWAY_TOKEN",
+                    gateway_url="ws://localhost:3000") as call:
+        async for ev in call.events():
+            if ev["type"] == "speech.ended":
+                audio = await call.recv()
+                await call.send(audio)  # echo back
 
-if __name__ == "__main__":
-    asyncio.run(run_byo_agent(sys.argv[1], sys.argv[2]))
+asyncio.run(main())
 ```
 
-Run the example using:
-```bash
-python3 examples/byo-agent.py <roomId> <agentToken>
+### BYO agent — Node / TS
+
+```ts
+import { join } from '@roomkit/sdk';
+
+const call = await join({ url: 'ws://localhost:3000', room: 'room-abc', token: 'GATEWAY_TOKEN' });
+call.events.on('event', async (ev) => {
+  if (ev.type === 'speech.ended') {
+    const audio = await call.recv();
+    call.send(audio);
+  }
+});
 ```
 
----
+### Deterministic local sim (no network)
 
-## Environment Variables Reference
+Both SDKs ship a `SimulatedRoom` with identical surface — same `recv() / send() / events()` — so you can unit-test agents offline. See [`docs/sdk-quickstart.md`](docs/sdk-quickstart.md) for the full mirror.
 
-Create a `.env` in `services/gateway/` to manage configurations:
+## REST API
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/v1/rooms` | Create a room |
+| GET | `/v1/rooms/:id` | Room state + live participants |
+| DELETE | `/v1/rooms/:id` | Force-end a room |
+| POST | `/v1/rooms/:id/tokens` | Mint a LiveKit token (legacy) |
+| POST | `/v1/rooms/:id/tokens/sign` | Mint a dual `{gatewayToken, livekitToken}` (tenant-scoped) |
+| POST | `/v1/rooms/:id/recording/start` | Start LiveKit Egress composite recording |
+| POST | `/v1/rooms/:id/recording/stop` | Stop recording + persist duration |
+| GET | `/v1/rooms/:id/recording` | Latest recording URL |
+| GET | `/v1/rooms/:id/transcript` | All speaker-tagged chunks |
+| GET | `/v1/rooms/:id/summary` | AI-generated meeting summary |
+| GET | `/v1/tenants/me` | Tenant metadata for the calling API key |
+| POST | `/v1/webhooks/livekit` | LiveKit webhook ingress |
+
+All REST endpoints require `x-api-key`. Default dev key is `dev` (seeded into Postgres on first boot).
+
+## BYO WebSocket gateway
+
+```
+ws://<host>/v1/rooms/:id/agent?token=<gatewayToken>&stream=mixed
+ws://<host>/v1/rooms/:id/agent?token=<gatewayToken>&stream=per-track&participantId=<id>
+```
+
+- Binary frame = audio. Length must be a positive multiple of 640 bytes. Sample format: 16 kHz mono Int16 LE, 20 ms = 320 samples = 640 bytes.
+- Text frame = JSON `RoomEvent` (see `packages/shared/src/events.ts`).
+- `stream=mixed` (default) gives you the downmixed room audio. `stream=per-track` pins audio to one participant — useful for diarization-aware agents that join one stream per speaker.
+
+## Environment
+
 ```ini
 PORT=3000
 ROOMKIT_API_KEY=dev
@@ -169,19 +156,47 @@ MINIO_ACCESS_KEY=admin
 MINIO_SECRET_KEY=admin12345
 MINIO_BUCKET=roomkit-recordings
 NEXT_PUBLIC_GATEWAY_URL=http://localhost:3000
+NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880
+
+# Default agent (only required if defaultAgent=true)
+OPENAI_API_KEY=...
+DEEPGRAM_API_KEY=...
+ELEVENLABS_API_KEY=...
 ```
 
----
+## Repository layout
 
-## Production Deployment Notes
+```
+apps/web/              Next.js 14 white-label web client
+services/gateway/      Fastify+TS REST + WS bridge + LiveKit Egress + supervisor
+services/agent/        Default Python livekit-agents voice host
+packages/shared/       Frozen wire contract + RoomEvent types
+packages/sdk/          @roomkit/sdk — Node BYO SDK + SimulatedRoom
+packages/sim-sdk-py/   callplatform — Python BYO SDK + SimulatedRoom
+infra/                 docker-compose (Postgres + MinIO + LiveKit)
+docs/                  architecture, SDK quickstart, feasibility study
+```
 
-1. **LiveKit SFU**: Spin up a LiveKit Cloud project to get production-grade media servers with optimized TURN. Paste the credentials into your `.env`.
-2. **Gateway**: Deploy the Node Fastify gateway to Vercel or any container service (Render, AWS ECS). Ensure persistent WebSockets are enabled.
-3. **Database**: Use a serverless Postgres option like Supabase or Neon. Run `infra/postgres/init.sql` schema bootstrap.
-4. **S3 Storage**: Set up an AWS S3, Cloudflare R2, or Vercel Blob bucket, and link it in the environment variables to persist recorded meeting mp4s.
+## Status
 
----
+Alpha. Wave-A and wave-B feature lanes shipped; see `SWARM.md` for the parallel-build history and `docs/call-platform-feasibility.md` for the design study. Next up: inactivity auto-close, landing/marketing, an Egress signed-URL helper, and a deployable production reference stack. Track open work in [GitHub Issues](../../issues) once the project is pushed.
+
+## Contributing
+
+```bash
+git clone <repo>
+cd roomKit
+pnpm install
+pnpm --filter @roomkit/shared build
+pnpm --filter @roomkit/shared test     # 9/9 wire-contract tests
+cd packages/sdk && node --test test/   # 4/4 Node sim tests
+cd ../sim-sdk-py && python3 -m venv .venv && source .venv/bin/activate
+pip install -e . pytest pytest-asyncio websockets
+PYTHONPATH=src pytest -q --asyncio-mode=auto  # 17/17 Python sim tests
+```
+
+Open a PR against a `feat/*` branch. Keep the wire contract frozen — any change to `packages/shared/src/wire.ts` requires bumping `WIRE_VERSION` and coordinating with every SDK and the gateway.
 
 ## License
 
-Licensed under the Apache License, Version 2.0 (the "License"). You may obtain a copy of the License in the LICENSE file.
+Apache 2.0 — see [LICENSE](LICENSE).

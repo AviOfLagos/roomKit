@@ -2,25 +2,54 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Video, Bot, Shield, ArrowRight, Copy, Check } from 'lucide-react';
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  Code,
+  Copy,
+  Github,
+  Layers,
+  PlayCircle,
+  Radio,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Zap,
+} from 'lucide-react';
 import { createRoom, type CreateRoomResponse } from '../lib/api';
 
-/**
- * Landing page — single CTA `Create a Room`.
- *
- * Hits the gateway via the Next.js `/v1/*` rewrite, then either redirects
- * straight to the returned `joinUrl` path or surfaces the result so the
- * host can copy the share link and tokens before entering.
- */
+type Lang = 'python' | 'node';
+
+const SNIPPETS: Record<Lang, string> = {
+  python: `from callplatform import join
+
+async with join(room_id="room-abc", token=TOKEN) as call:
+    async for ev in call.events():
+        if ev["type"] == "speech.ended":
+            audio = await call.recv()        # 16k mono PCM, 640 B / 20 ms
+            await call.send(my_llm_and_tts(audio))`,
+  node: `import { join } from '@roomkit/sdk';
+
+const call = await join({ url: WS_URL, room: 'room-abc', token: TOKEN });
+call.events.on('event', async (ev) => {
+  if (ev.type === 'speech.ended') {
+    const audio = await call.recv();        // Buffer, multiples of 640 B
+    call.send(await myLlmAndTts(audio));
+  }
+});`,
+};
+
 export default function LandingPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [lang, setLang] = useState<Lang>('python');
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [room, setRoom] = useState<CreateRoomResponse | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const handleCreate = async () => {
-    setLoading(true);
+  const startRoom = async () => {
+    setCreating(true);
     setError(null);
     try {
       const data = await createRoom({ defaultAgent: true });
@@ -28,148 +57,184 @@ export default function LandingPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room');
     } finally {
-      setLoading(false);
+      setCreating(false);
     }
   };
 
-  const joinPath = (() => {
-    if (!room) return null;
+  const enterRoom = () => {
+    if (!room) return;
     try {
       const url = new URL(room.joinUrl);
-      return url.pathname + url.search;
+      router.push(url.pathname + url.search);
     } catch {
-      // joinUrl may already be a relative path
-      return room.joinUrl.startsWith('/') ? room.joinUrl : `/room/${room.roomId}`;
+      router.push(room.joinUrl.startsWith('/') ? room.joinUrl : `/room/${room.roomId}`);
     }
-  })();
+  };
 
   const copyLink = async () => {
     if (!room) return;
-    try {
-      await navigator.clipboard.writeText(room.joinUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
-    }
+    await navigator.clipboard.writeText(room.joinUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
-    <main className="rk-landing min-h-screen flex flex-col p-6 md:p-12">
-      <header className="flex justify-between items-center w-full max-w-6xl mx-auto mb-12">
-        <div className="flex items-center gap-2">
-          <Bot className="w-7 h-7 text-indigo-400 animate-glow" />
-          <span className="font-display font-bold text-lg tracking-tight text-white">
-            room<span className="text-indigo-400">Kit</span>
-          </span>
+    <main className="rk-landing">
+      <header className="rk-nav">
+        <div className="rk-nav-brand">
+          <Sparkles size={20} />
+          <span>roomKit</span>
         </div>
-        <div className="flex items-center gap-2 text-xs bg-zinc-900/60 border border-zinc-800 rounded-full px-3 py-1.5 text-zinc-400 font-medium">
-          <Shield className="w-3.5 h-3.5 text-indigo-400" />
-          Phase 1 (api-key: dev)
-        </div>
+        <nav className="rk-nav-links">
+          <a href="#features">Features</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="#contribute">Contribute</a>
+          <a href="https://github.com" className="rk-nav-gh" target="_blank" rel="noreferrer">
+            <Github size={16} /> GitHub
+          </a>
+        </nav>
       </header>
 
-      <section className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto w-full text-center space-y-8">
-        <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-3.5 py-1.5 rounded-full text-xs font-semibold">
-          <Sparkles className="w-3.5 h-3.5" />
-          Hosted WebRTC + Built-In AI
-        </div>
-
-        <h1 className="font-display text-4xl md:text-6xl font-extrabold leading-tight tracking-tight text-white">
-          One click meetings with <span className="text-glow">embedded AI</span>
-        </h1>
-
-        <p className="text-zinc-400 text-base md:text-lg max-w-xl">
-          Mint a roomKit room, share the link, and let the platform handle
-          WebRTC, transcription, and an AI host out of the box.
+      <section className="rk-hero">
+        <span className="rk-pill"><Radio size={14} /> Apache 2.0 · Alpha</span>
+        <h1>Voice & video rooms with AI agents built in.</h1>
+        <p className="rk-lede">
+          Hosted WebRTC SFU + a bundled AI host + a 10-line SDK for your own agents.
+          One frame contract. <strong>16 kHz mono PCM, 640-byte 20 ms frames</strong>. Your code never touches WebRTC.
         </p>
 
-        {!room ? (
-          <>
-            <button
-              id="btn-create-room"
-              onClick={handleCreate}
-              disabled={loading}
-              className="btn-glowing px-8 py-4 text-base flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                <>
-                  Create a Room <ArrowRight className="w-5 h-5" />
-                </>
-              )}
+        <div className="rk-cta-row">
+          <button className="rk-btn rk-btn-primary" onClick={startRoom} disabled={creating}>
+            {creating ? 'Spinning up…' : <>Try a live room <ArrowRight size={16} /></>}
+          </button>
+          <a className="rk-btn rk-btn-ghost" href="#quickstart">
+            <Terminal size={16} /> See the SDK
+          </a>
+        </div>
+
+        {error && <p className="rk-error">{error}</p>}
+
+        {room && (
+          <div className="rk-room-card">
+            <div className="rk-room-card-head">
+              <strong>Room ready:</strong> <code>{room.roomId}</code>
+            </div>
+            <div className="rk-room-card-row">
+              <input readOnly value={room.joinUrl} className="rk-input" onFocus={(e) => e.currentTarget.select()} />
+              <button className="rk-icon-btn" onClick={copyLink} aria-label="Copy share link">
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            </div>
+            <button className="rk-btn rk-btn-primary rk-room-enter" onClick={enterRoom}>
+              <PlayCircle size={16} /> Enter the room
             </button>
-            {error && (
-              <p className="text-sm text-red-400 max-w-md">
-                {error}
-                <br />
-                <span className="text-xs text-red-400/70">
-                  Is the gateway running on NEXT_PUBLIC_GATEWAY_URL?
-                </span>
-              </p>
-            )}
-          </>
-        ) : (
-          <div className="w-full max-w-xl glass-panel p-6 space-y-5 text-left">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                <Check className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="font-display font-bold text-base text-white">Room created</h2>
-                <span className="text-[11px] font-mono text-zinc-500 select-all">
-                  {room.roomId}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-2.5">
-              <span
-                id="text-join-url"
-                className="text-[11px] font-mono text-zinc-300 select-all truncate flex-1"
-              >
-                {room.joinUrl}
-              </span>
-              <button
-                id="btn-copy-link"
-                onClick={copyLink}
-                title="Copy invite link"
-                className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white p-2 rounded transition-colors"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={() => setRoom(null)}
-                className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-medium py-3 rounded-lg border border-zinc-800 transition-colors text-sm"
-              >
-                New room
-              </button>
-              <button
-                id="btn-enter-room"
-                onClick={() => joinPath && router.push(joinPath)}
-                className="flex-1 btn-glowing py-3 flex items-center justify-center gap-1.5 text-sm"
-              >
-                Enter call <Video className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         )}
       </section>
 
-      <footer className="text-center w-full max-w-6xl mx-auto border-t border-zinc-900 pt-6 mt-12 text-zinc-600 text-xs">
-        &copy; {new Date().getFullYear()} roomKit — Apache 2.0
+      <section id="features" className="rk-features">
+        <h2>What you get out of the box</h2>
+        <div className="rk-feature-grid">
+          <FeatureCard
+            icon={<Layers size={20} />}
+            title="Frozen wire contract"
+            body="16 kHz mono PCM Int16 LE, 20 ms binary frames + JSON control on the same WebSocket. Mirror once, ship anywhere."
+          />
+          <FeatureCard
+            icon={<Bot size={20} />}
+            title="Bundled AI host"
+            body="Silero VAD · Deepgram STT · GPT-4o-mini · ElevenLabs TTS. Set a systemPrompt, the agent joins and transcribes."
+          />
+          <FeatureCard
+            icon={<Code size={20} />}
+            title="BYO agent SDKs"
+            body="callplatform (Python) + @roomkit/sdk (Node). Same surface: recv(), send(), events(). Ships a SimulatedRoom for offline tests."
+          />
+          <FeatureCard
+            icon={<Radio size={20} />}
+            title="Mixed or per-track audio"
+            body="Pin the stream to one participant for diarization-aware agents. Add ?stream=per-track&participantId=… to the WS URL."
+          />
+          <FeatureCard
+            icon={<ShieldCheck size={20} />}
+            title="Multi-tenant, JWT-scoped"
+            body="API keys bind to tenants. POST /v1/rooms/:id/tokens/sign returns a dual {gatewayToken, livekitToken} pair."
+          />
+          <FeatureCard
+            icon={<Zap size={20} />}
+            title="Supervised bridge"
+            body="Bounded-restart subprocess wrapper. Bridge crashes? Respawn + recoverable error event — the SDK never sees a drop."
+          />
+        </div>
+      </section>
+
+      <section id="quickstart" className="rk-quickstart">
+        <h2>Ten lines and you’re in a call.</h2>
+        <p className="rk-sub">Same primitives in every language. Mock with SimulatedRoom; ship by swapping the URL.</p>
+
+        <div className="rk-tabs">
+          <button
+            className={`rk-tab ${lang === 'python' ? 'rk-tab-active' : ''}`}
+            onClick={() => setLang('python')}
+          >
+            Python
+          </button>
+          <button
+            className={`rk-tab ${lang === 'node' ? 'rk-tab-active' : ''}`}
+            onClick={() => setLang('node')}
+          >
+            Node · TypeScript
+          </button>
+        </div>
+
+        <pre className="rk-snippet"><code>{SNIPPETS[lang]}</code></pre>
+
+        <div className="rk-quickstart-shell">
+          <div className="rk-shell-head">terminal</div>
+          <pre className="rk-shell-body"><code>{`docker-compose -f infra/docker-compose.yml up -d
+pnpm install && pnpm --filter @roomkit/shared build
+pnpm dev                # gateway :3000 · web :3001`}</code></pre>
+        </div>
+      </section>
+
+      <section id="contribute" className="rk-contribute">
+        <h2>Contribute</h2>
+        <p className="rk-sub">
+          roomKit is built in lanes. Pick an open issue, branch from <code>main</code>, ship a focused PR.
+          The wire contract is FROZEN — any change to <code>packages/shared/src/wire.ts</code> needs a
+          coordinated version bump across every SDK.
+        </p>
+        <div className="rk-cta-row">
+          <a className="rk-btn rk-btn-primary" href="https://github.com" target="_blank" rel="noreferrer">
+            <Github size={16} /> View on GitHub
+          </a>
+          <a className="rk-btn rk-btn-ghost" href="https://github.com/issues" target="_blank" rel="noreferrer">
+            Browse issues <ArrowRight size={16} />
+          </a>
+        </div>
+        <ul className="rk-contrib-list">
+          <li><strong>Good first issues:</strong> contributor guide, web landing polish, real LLM example.</li>
+          <li><strong>Hard wins:</strong> inactivity auto-close, signed-URL helper, SIP ingress.</li>
+          <li><strong>Bring your own:</strong> agent recipes, framework adapters, deployment templates.</li>
+        </ul>
+      </section>
+
+      <footer className="rk-footer">
+        <span>roomKit · Apache 2.0 · built with caveman energy.</span>
+        <a href="https://github.com" target="_blank" rel="noreferrer">
+          <Github size={14} /> source
+        </a>
       </footer>
     </main>
+  );
+}
+
+function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <div className="rk-feature">
+      <div className="rk-feature-icon">{icon}</div>
+      <h3>{title}</h3>
+      <p>{body}</p>
+    </div>
   );
 }
