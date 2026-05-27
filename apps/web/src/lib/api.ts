@@ -12,6 +12,10 @@ export const LIVEKIT_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_LIVEKIT_URL) ||
   'ws://localhost:7880';
 
+export const GATEWAY_URL =
+  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GATEWAY_URL) ||
+  '';  // empty = use the Next.js /v1 rewrite
+
 export type CreateRoomResponse = {
   roomId: string;
   joinUrl: string;
@@ -71,4 +75,15 @@ export async function fetchSummary(roomId: string): Promise<SummaryResponse | nu
   });
   if (res.status === 404 || res.status === 202) return null;
   return jsonOrThrow<SummaryResponse>(res);
+}
+
+export async function extendRoom(roomId: string): Promise<void> {
+  await fetch(`/v1/rooms/${encodeURIComponent(roomId)}/extend`, { method: 'POST' });
+}
+
+export async function deleteRoom(roomId: string): Promise<void> {
+  await fetch(`/v1/rooms/${encodeURIComponent(roomId)}`, {
+    method: 'DELETE',
+    headers: { 'x-api-key': API_KEY },
+  });
 }

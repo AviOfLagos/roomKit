@@ -50,6 +50,17 @@ export type RoomEvent = {
     durationMs: number;
     at: number;
 } | {
+    type: 'room.inactivity.warning';
+    closesInMs: number;
+    at: number;
+} | {
+    type: 'room.inactivity.cancelled';
+    at: number;
+} | {
+    type: 'room.closed';
+    reason: string;
+    at: number;
+} | {
     type: 'error';
     code: string;
     message: string;

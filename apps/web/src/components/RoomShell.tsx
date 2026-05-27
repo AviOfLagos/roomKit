@@ -8,6 +8,7 @@ import { LIVEKIT_URL } from '../lib/api';
 import { VideoGrid } from './VideoGrid';
 import { CallControlBar } from './CallControlBar';
 import { SidePanel } from './SidePanel';
+import { InactivityModal } from './InactivityModal';
 
 type Props = {
   roomId: string;
@@ -59,6 +60,7 @@ export function RoomShell({ roomId, token, displayName }: Props) {
           <SidePanel />
         </div>
 
+        <InactivityModal roomId={roomId} />
         <RoomAudioRenderer />
       </LiveKitRoom>
     </main>
