@@ -18,6 +18,11 @@ import {
   Zap,
 } from 'lucide-react';
 import { createRoom, type CreateRoomResponse } from '../lib/api';
+import { Waveform } from '../components/widgets/Waveform';
+import { FlowDiagram } from '../components/widgets/FlowDiagram';
+import { FrameInspector } from '../components/widgets/FrameInspector';
+import { DiarizationCompare } from '../components/widgets/DiarizationCompare';
+import { AmbientField } from '../components/widgets/AmbientField';
 
 type Lang = 'python' | 'node';
 
@@ -86,54 +91,95 @@ export default function LandingPage() {
           <span>roomKit</span>
         </div>
         <nav className="rk-nav-links">
-          <a href="#features">Features</a>
+          <a href="#wire">Wire</a>
+          <a href="#flow">Flow</a>
+          <a href="#diarize">Per-track</a>
           <a href="#quickstart">Quickstart</a>
           <a href="#contribute">Contribute</a>
-          <a href="https://github.com" className="rk-nav-gh" target="_blank" rel="noreferrer">
+          <a
+            href="https://github.com/AviOfLagos/roomKit"
+            className="rk-nav-gh"
+            target="_blank"
+            rel="noreferrer"
+          >
             <Github size={16} /> GitHub
           </a>
         </nav>
       </header>
 
       <section className="rk-hero">
-        <span className="rk-pill"><Radio size={14} /> Apache 2.0 · Alpha</span>
-        <h1>Voice & video rooms with AI agents built in.</h1>
-        <p className="rk-lede">
-          Hosted WebRTC SFU + a bundled AI host + a 10-line SDK for your own agents.
-          One frame contract. <strong>16 kHz mono PCM, 640-byte 20 ms frames</strong>. Your code never touches WebRTC.
-        </p>
+        <AmbientField />
+        <div className="rk-hero-inner">
+          <span className="rk-pill"><Radio size={14} /> Apache 2.0 · Alpha · LiveKit-powered</span>
+          <h1>Voice & video rooms with AI agents built in.</h1>
+          <p className="rk-lede">
+            One hosted SFU. One frame contract. <strong>16 kHz mono PCM, 640-byte 20 ms frames.</strong>{' '}
+            Spin up a room, drop in the bundled AI host, plug your own agent in with ten lines —
+            your code never touches WebRTC.
+          </p>
 
-        <div className="rk-cta-row">
-          <button className="rk-btn rk-btn-primary" onClick={startRoom} disabled={creating}>
-            {creating ? 'Spinning up…' : <>Try a live room <ArrowRight size={16} /></>}
-          </button>
-          <a className="rk-btn rk-btn-ghost" href="#quickstart">
-            <Terminal size={16} /> See the SDK
-          </a>
-        </div>
+          <Waveform />
 
-        {error && <p className="rk-error">{error}</p>}
+          <div className="rk-cta-row">
+            <button className="rk-btn rk-btn-primary" onClick={startRoom} disabled={creating}>
+              {creating ? 'Spinning up…' : <>Try a live room <ArrowRight size={16} /></>}
+            </button>
+            <a className="rk-btn rk-btn-ghost" href="#quickstart">
+              <Terminal size={16} /> See the SDK
+            </a>
+          </div>
 
-        {room && (
-          <div className="rk-room-card">
-            <div className="rk-room-card-head">
-              <strong>Room ready:</strong> <code>{room.roomId}</code>
-            </div>
-            <div className="rk-room-card-row">
-              <input readOnly value={room.joinUrl} className="rk-input" onFocus={(e) => e.currentTarget.select()} />
-              <button className="rk-icon-btn" onClick={copyLink} aria-label="Copy share link">
-                {copied ? <Check size={16} /> : <Copy size={16} />}
+          {error && <p className="rk-error">{error}</p>}
+
+          {room && (
+            <div className="rk-room-card">
+              <div className="rk-room-card-head">
+                <strong>Room ready:</strong> <code>{room.roomId}</code>
+              </div>
+              <div className="rk-room-card-row">
+                <input
+                  readOnly
+                  value={room.joinUrl}
+                  className="rk-input"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button className="rk-icon-btn" onClick={copyLink} aria-label="Copy share link">
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+              </div>
+              <button className="rk-btn rk-btn-primary rk-room-enter" onClick={enterRoom}>
+                <PlayCircle size={16} /> Enter the room
               </button>
             </div>
-            <button className="rk-btn rk-btn-primary rk-room-enter" onClick={enterRoom}>
-              <PlayCircle size={16} /> Enter the room
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
-      <section id="features" className="rk-features">
-        <h2>What you get out of the box</h2>
+      <section id="wire" className="rk-section">
+        <div className="rk-section-head">
+          <h2>One frame. Frozen.</h2>
+          <p className="rk-sub">
+            Every audio packet on every wire — same shape, every language, every release.
+          </p>
+        </div>
+        <FrameInspector />
+      </section>
+
+      <section id="flow" className="rk-section">
+        <div className="rk-section-head">
+          <h2>How the bytes move.</h2>
+          <p className="rk-sub">
+            LiveKit handles WebRTC. The gateway translates to plain PCM frames.
+            Your BYO agent never sees an ICE candidate.
+          </p>
+        </div>
+        <FlowDiagram />
+      </section>
+
+      <section className="rk-section rk-features-section">
+        <div className="rk-section-head">
+          <h2>What you get out of the box.</h2>
+        </div>
         <div className="rk-feature-grid">
           <FeatureCard
             icon={<Layers size={20} />}
@@ -168,9 +214,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="quickstart" className="rk-quickstart">
-        <h2>Ten lines and you’re in a call.</h2>
-        <p className="rk-sub">Same primitives in every language. Mock with SimulatedRoom; ship by swapping the URL.</p>
+      <section id="diarize" className="rk-section">
+        <div className="rk-section-head">
+          <h2>Mixed or per-track. Same wire.</h2>
+          <p className="rk-sub">
+            Same SDK call. Add <code>?stream=per-track&amp;participantId=…</code> and you get one clean lane per speaker.
+          </p>
+        </div>
+        <DiarizationCompare />
+      </section>
+
+      <section id="quickstart" className="rk-section rk-quickstart">
+        <div className="rk-section-head">
+          <h2>Ten lines and you’re in a call.</h2>
+          <p className="rk-sub">Same primitives in every language. Mock with SimulatedRoom; ship by swapping the URL.</p>
+        </div>
 
         <div className="rk-tabs">
           <button
@@ -197,31 +255,33 @@ pnpm dev                # gateway :3000 · web :3001`}</code></pre>
         </div>
       </section>
 
-      <section id="contribute" className="rk-contribute">
-        <h2>Contribute</h2>
-        <p className="rk-sub">
-          roomKit is built in lanes. Pick an open issue, branch from <code>main</code>, ship a focused PR.
-          The wire contract is FROZEN — any change to <code>packages/shared/src/wire.ts</code> needs a
-          coordinated version bump across every SDK.
-        </p>
+      <section id="contribute" className="rk-section rk-contribute">
+        <div className="rk-section-head">
+          <h2>Contribute</h2>
+          <p className="rk-sub">
+            roomKit is built in lanes. Pick an open issue, branch from <code>main</code>, ship a focused PR.
+            The wire contract is FROZEN — any change to <code>packages/shared/src/wire.ts</code> requires a
+            coordinated version bump across every SDK.
+          </p>
+        </div>
         <div className="rk-cta-row">
-          <a className="rk-btn rk-btn-primary" href="https://github.com" target="_blank" rel="noreferrer">
+          <a className="rk-btn rk-btn-primary" href="https://github.com/AviOfLagos/roomKit" target="_blank" rel="noreferrer">
             <Github size={16} /> View on GitHub
           </a>
-          <a className="rk-btn rk-btn-ghost" href="https://github.com/issues" target="_blank" rel="noreferrer">
+          <a className="rk-btn rk-btn-ghost" href="https://github.com/AviOfLagos/roomKit/issues" target="_blank" rel="noreferrer">
             Browse issues <ArrowRight size={16} />
           </a>
         </div>
         <ul className="rk-contrib-list">
           <li><strong>Good first issues:</strong> contributor guide, web landing polish, real LLM example.</li>
-          <li><strong>Hard wins:</strong> inactivity auto-close, signed-URL helper, SIP ingress.</li>
+          <li><strong>Hard wins:</strong> recording presign, tenant admin UI, SIP ingress.</li>
           <li><strong>Bring your own:</strong> agent recipes, framework adapters, deployment templates.</li>
         </ul>
       </section>
 
       <footer className="rk-footer">
         <span>roomKit · Apache 2.0 · built with caveman energy.</span>
-        <a href="https://github.com" target="_blank" rel="noreferrer">
+        <a href="https://github.com/AviOfLagos/roomKit" target="_blank" rel="noreferrer">
           <Github size={14} /> source
         </a>
       </footer>
