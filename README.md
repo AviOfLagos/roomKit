@@ -2,7 +2,10 @@
 
 **Standalone WebRTC + AI call platform.** Build voice/video rooms with humans, the bundled context-aware AI host, and any number of custom AI agents — joined through one 10-line SDK or a raw 640-byte PCM WebSocket. LiveKit under the hood; your code never touches WebRTC.
 
-[![status: alpha](https://img.shields.io/badge/status-alpha-orange)](#status) [![license: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue)](LICENSE) [![docs](https://img.shields.io/badge/docs-architecture-purple)](docs/architecture.md)
+[![live demo](https://img.shields.io/badge/live-roomkit--omega.vercel.app-22d3ee)](https://roomkit-omega.vercel.app) [![status: alpha](https://img.shields.io/badge/status-alpha-orange)](#status) [![license: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue)](LICENSE) [![docs](https://img.shields.io/badge/docs-architecture-purple)](docs/architecture.md)
+
+**Live landing page:** https://roomkit-omega.vercel.app
+**Deploy your own copy:** [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/AviOfLagos/roomKit&root-directory=apps/web&project-name=roomkit&repository-name=roomKit)
 
 ---
 
